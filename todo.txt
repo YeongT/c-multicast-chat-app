@@ -1,0 +1,54 @@
+# TODO
+
+1. 채팅 서버
+    A. 기술
+        - Multicasting Group join
+        - IO MultiFlexing
+        - TCP Communication
+    B. 기능
+        - Heartbeat 기능
+        - 1:1 Chatting 기능
+        - 접속 목록 띄우기
+        - 유저가 로그인 상태 확인
+        
+
+//# Process Schema (* : system(auto), # : type text, = : waiting input, < > : data transfer)
+//  # ./client $multi_cast_ip $port 
+//  < [multicast_server] send iomux_server ip & port using multicast
+//
+//  * [client] ./tcp_connect $iomux_server_ip $port (open socket)
+//  * [iomux_server] accept tcp connection
+//
+//  * while loop started
+//    # login $nickname
+//      > commandObject[login, '$nickname'] 
+//      * [iomux_server] set nickname of userObject
+//      < responseObject[status, 'result']
+//  
+//    # chat $nickname (should check if user logined - user local userName variable)
+//      > commandObject[check,'$nickname']
+//      < responseObject[status,'result']
+//  
+//      * if (offline) throw errorMsg & break;
+//      * while loop started
+//        =
+//          # $message (exit to !qa)
+//          > messageObject[chat, '$nickname', '$message']
+//        = 
+//          < messageObject[chat, '$origin', '$message']
+//          * if(($receive = read()) > 0) print($receive)
+//
+//    # logout
+//    * [client] remove local userName variable
+//
+//    # help
+//    * [client] show help manual
+//
+//    # (unknown_command)
+//    * [client] show command error msg
+//
+//    # exit
+//  * while loop ended
+//  * [client] close tcp connection(close socket)
+//  * program ended(return 0)
+//
