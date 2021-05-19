@@ -10,7 +10,23 @@
         - 1:1 Chatting 기능
         - 접속 목록 띄우기
         - 유저가 로그인 상태 확인
+2. 개발 규칙
+    A. read(), write() 함수는 무조건 MAX_BUF의 사이즈로 쏠 것.
+    B. 출력시 fprintf(stdout, "%d%s", arvs....)을 사용할 것.
         
+//# Struct Usage Schema
+//
+// [RECEIVE] read string (dataString), generate targetDataObject
+// convertDataObjectStringToDataObject(dataString, &targetDataObject)
+// convert{resultObject, optionObject, chatObject}stringTo{...}Object(&targetDataObject->body, &{...}Object)
+// targetDataObject.body({resultObject, optionObject, chatObject}) => str to obj (str, &obj)
+// handle object-data
+//
+// [SEND] generate object {resultObject, optionObject, chatObject}, dataObject
+// convert{result, option, chat}ObjectToDataObject(&{resultObject, optionObject, chatObject}, &dataObject)
+// convertDataObjectToDataObjectString(&targetDataObject, dataString);
+// write string (dataString)
+
 
 //# Process Schema (* : system(auto), # : type text, = : waiting input, < > : data transfer)
 //  # ./client $multi_cast_ip $port 
