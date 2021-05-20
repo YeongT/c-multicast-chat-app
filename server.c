@@ -12,11 +12,18 @@
 #include "define.h"
 
 //# define userSocketObject
-typedef struct
+typedef struct userFrame
 {
     int sock;
     char nickname[SIZE_OPTION];
 } userSocketObject;
+
+typedef struct messageBoxFrame
+{
+    bool reserved;
+    char target[SIZE_OPTION];
+    char message[MAX_BUF];
+} messageBoxObject;
 
 //# return valid client number
 int getClientNumber(userSocketObject *userList)
@@ -51,28 +58,70 @@ void respondToClient(int sock, int status, char *message, char *serverMsgContain
     dataObject respond;
     convertResultObjectToDataObject(&response, &respond);
     convertDataObjectToDataObjectString(&respond, serverMsgContainer);
-    write(sock, serverMsgContainer, MAX_BUF); //여기서 문제 발생 or read()
+    write(sock, serverMsgContainer, MAX_BUF);
+}
+
+//# sendMessageToClient
+void sendChatMessageToClient(int sock, char *chatClient, char *chatMessage, char *serverMsgContainer)
+{
+    memset(serverMsgContainer, 0, sizeof(serverMsgContainer));
+
+    chatObject toMessage;
+    strcpy(toMessage.client, chatClient);
+    strcpy(toMessage.message, chatMessage);
+
+    dataObject sendObject;
+    convertChatObjectToDataObject(&toMessage, &sendObject);
+    convertDataObjectToDataObjectString(&sendObject, serverMsgContainer);
+    write(sock, serverMsgContainer, MAX_BUF);
 }
 
 //# split command process
-void commandCenter(dataObject *income, userSocketObject *users, char *serverComment, char *sendMsg, int i) 
-{   
-    if (income->cmdCode == COMMAND_LOGIN)
+void commandCenter(dataObject *income, userSocketObject *users, char *serverComment, char *sendMsg, int i)
+{
+    if (income->cmdCode == COMMAND_LOGIN || income->cmdCode == COMMAND_LOGOUT)
     {
         optionObject loginReq;
         convertOptionStringToOptionObject(income->body, &loginReq);
-        if (getUserSockByNickname(loginReq.argument, users) == -1)
+        if (income->cmdCode == COMMAND_LOGOUT)
+        {
+            memset(users[i].nickname, 0, sizeof(users[i].nickname));
+            respondToClient(users[i].sock, RESPONSE_LOGIN_FAILED, "goodbye", sendMsg);
+            return;
+        }
+
+        if (income->cmdCode == COMMAND_LOGIN && getUserSockByNickname(loginReq.argument, users) == -1)
         {
             strcpy(users[i].nickname, loginReq.argument);
             sprintf(serverComment, "Welcome user '%s'! Have a nice day!", users[i].nickname);
             respondToClient(users[i].sock, RESPONSE_LOGIN_SUCCESS, serverComment, sendMsg);
             fprintf(stdout, "[System Login] user '%s' signed in to system.\n", users[i].nickname);
+            return;
         }
-        else
+        sprintf(serverComment, "nickname '%s' is already in use", loginReq.argument);
+        respondToClient(users[i].sock, RESPONSE_LOGIN_FAILED, serverComment, sendMsg);
+    }
+    else if (income->cmdCode == COMMAND_CHECK)
+    {
+        optionObject vitalCheck;
+        convertOptionStringToOptionObject(income->body, &vitalCheck);
+        sprintf(serverComment, "nickname '%s' is %s", vitalCheck.argument, getUserSockByNickname(vitalCheck.argument, users) != -1 ? "not online" : "online");
+        respondToClient(users[i].sock, getUserSockByNickname(vitalCheck.argument, users) != -1 ? RESPONSE_CHECK_OFFLINE : RESPONSE_CHECK_ONLINE, serverComment, sendMsg);
+    }
+    else if (income->cmdCode == COMMAND_CHAT)
+    {
+        int targetSock;
+
+        chatObject fromMessage;
+        convertChatStringToChatObject(income->body, &fromMessage);
+
+        if ((targetSock = getUserSockByNickname(fromMessage.client, users)) == -1)
         {
-            sprintf(serverComment, "nickname '%s' is already in use", loginReq.argument);
-            respondToClient(users[i].sock, RESPONSE_LOGIN_FAILED, serverComment, sendMsg);
+            sprintf(serverComment, "nickname '%s' is not online", fromMessage.client);
+            respondToClient(users[i].sock, RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
+            return;
         }
+        sendChatMessageToClient(targetSock, users[i].nickname, fromMessage.message, sendMsg);
     }
     else
         respondToClient(users[i].sock, RESPONSE_ERROR, "UnAcceptable Command Inputed", sendMsg);
@@ -87,13 +136,18 @@ int main(int argc, char **argv)
     fd_set readfds, otherfds, allfds;
     struct timeval tv;
     userSocketObject users[MAX_CLIENT];
+    connectObject connectInfo;
 
     //# argument option
-    if (argc != 2)
+    if (argc != 4)
     {
-        fprintf(stdout, "Usage : %s <port>\n", argv[0]);
+        fprintf(stdout, "Usage : %s <multicast ip> <multicast port> <iomux_port>\n", argv[0]);
         exit(1);
     }
+
+    //# set tcpServerConnectionInfo
+    sprintf(connectInfo.ip, "192.168.0.4");
+    connectInfo.port = atoi(argv[3]);
 
     //# server socket error handle
     if ((server_sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -106,7 +160,7 @@ int main(int argc, char **argv)
     memset(&serveraddr, 0x00, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
     serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serveraddr.sin_port = htons(atoi(argv[1]));
+    serveraddr.sin_port = htons(connectInfo.port);
     state = bind(server_sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
     if (state == -1)
     {
@@ -128,7 +182,8 @@ int main(int argc, char **argv)
     FD_ZERO(&readfds);
     FD_SET(server_sockfd, &readfds);
 
-    fprintf(stdout, "\nTCP Server Starting ... on %d\n", atoi(argv[1]));
+    fprintf(stdout, "\nUDP multiCast Server Starting ... on %s:%d", argv[1], atoi(argv[2]));
+    fprintf(stdout, "\nTCP iomux multiflexing Server Starting ... on %s:%d\n", connectInfo.ip, connectInfo.port);
 
     //# run server task forever
     for (int i = 0; i < MAX_CLIENT; i++)
@@ -137,6 +192,9 @@ int main(int argc, char **argv)
     {
         allfds = readfds;
         state = select(maxfd + 1, &allfds, NULL, NULL, NULL);
+
+        //# MultiCast Server : Deploy tcp_Iomux_Server_ConnectInfo
+        //broadConnectInformation();
 
         //# Server Socket - accept from client and save to userObject
         if (FD_ISSET(server_sockfd, &allfds))
@@ -188,7 +246,8 @@ int main(int argc, char **argv)
                     char serverComment[SIZE_MESSAGE];
                     memset(serverComment, 0, sizeof(serverComment));
 
-                    dataObject income;;
+                    dataObject income;
+                    ;
                     convertDataObjectStringToDataObject(recvMsg, &income);
                     commandCenter(&income, users, serverComment, sendMsg, i);
                 }

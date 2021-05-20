@@ -42,13 +42,18 @@ int main(int argc, char *argv[])
         memset(sendMsg, 0, sizeof(sendMsg));
         memset(recvMsg, 0, sizeof(recvMsg));
 
-        fputs("if you want to quit, press q or Q : ", stdout);
+        // fputs("if you want to quit, press q or Q : ", stdout);
+        fputs("Please input your nickname. If you want to quit, press q or Q : \n", stdout);
         memset(login.argument, 0, sizeof(login.argument));
         fgets(login.argument, sizeof(login.argument), stdin);
         login.argument[strlen(login.argument) - 1] = '\0';
 
-        if (strcmp(login.argument, "q") == 0)
-            break;
+        if (!strcmp(login.argument, "q") || !strcmp(login.argument, "Q"))
+        {
+            fputs("Pressed q", stdout);
+            exit(1);
+        }
+
         dataObject send, receive;
         convertOptionObjectToDataObject(COMMAND_LOGIN, &login, &send);
         convertDataObjectToDataObjectString(&send, sendMsg);
@@ -62,7 +67,19 @@ int main(int argc, char *argv[])
         convertResultStringToResultObject(receive.body, &result);
 
         printf("\n\nCommand Code: %d\nStatus: %d\nMessage from server: %s\n", receive.cmdCode, result.status, result.message);
+
+        if(result.status == RESPONSE_LOGIN_SUCCESS){
+            fprintf(stdout, "Logined\n");
+            break;
+        }else{
+            fprintf(stdout, "Nickname Already Exists.\n");
+        }
+
         fflush(0);
+    }
+    while (1)
+    {
+        
     }
 
     close(sock);

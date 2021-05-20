@@ -11,13 +11,15 @@
 
 #define COMMAND_RESULT 1000
 #define COMMAND_LOGIN 1001
-#define COMMAND_CHECK 1002
-#define COMMAND_CHAT 1003
+#define COMMAND_LOGOUT 1002
+#define COMMAND_CHECK 1003
+#define COMMAND_CHAT 1004
+#define COMMAND_MULTICAST 1005
 
 #define RESPONSE_LOGIN_SUCCESS 2000
 #define RESPONSE_LOGIN_FAILED 5000
-#define RESPONSE_ONLINE 2001
-#define RESPONSE_OFFLINE 5001
+#define RESPONSE_CHECK_ONLINE 2001
+#define RESPONSE_CHECK_OFFLINE 5001
 #define RESPONSE_ERROR -1
 
 void convertIntegerToAscii(int integer, char *string)
@@ -66,7 +68,7 @@ void copyMessageFromBodyString(int cmdCode, char *originBodyString, char *target
 typedef struct dataFrame
 {
     int cmdCode;
-    char body[MAX_BUF-SIZE_CMD_CODE];
+    char body[MAX_BUF - SIZE_CMD_CODE];
 } dataObject;
 
 void convertDataObjectStringToDataObject(char *originDataObjectString, dataObject *targetDataObject)
@@ -146,4 +148,21 @@ void convertChatObjectToDataObject(chatObject *originChatObject, dataObject *tar
     memset(targetDataObject->body, 0, SIZE_OPTION + SIZE_MESSAGE);
     memcpy(targetDataObject->body, originChatObject->client, SIZE_OPTION);
     memcpy(&targetDataObject->body[SIZE_OPTION], originChatObject->message, SIZE_MESSAGE);
+}
+
+typedef struct connectFrame
+{
+    int port;
+    char ip[15];
+} connectObject;
+
+void convertConnectStringToConnectObject(char *originConnectString, connectObject *targetConnectObject)
+{
+    // memcpy(targetConnectObject->ip, originBodyString, 15);
+    // memcpy(targetConnectObject->port, &originConnectString[15], 4);
+}
+
+void convertConnectObjectToDataObject(connectObject *originConnectObject, dataObject *targetDataObject)
+{
+    //얜 뭐하는 함수임??   ConnectObject를 DataObject로 바꿔주는
 }
