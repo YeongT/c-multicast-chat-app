@@ -17,13 +17,15 @@ typedef struct userFrame
     int sock;
     char nickname[SIZE_OPTION];
 } userSocketObject;
-
 typedef struct messageBoxFrame
 {
     bool reserved;
     char target[SIZE_OPTION];
     char message[MAX_BUF];
 } messageBoxObject;
+
+userSocketObject users[MAX_CLIENT];
+messageBoxObject mailingList[MAX_CLIENT];
 
 //# return valid client number
 int getClientNumber(userSocketObject *userList)
@@ -62,7 +64,7 @@ void respondToClient(int sock, int status, char *message, char *serverMsgContain
 }
 
 //# sendMessageToClient
-void sendChatMessageToClient(int sock, char *chatClient, char *chatMessage, char *serverMsgContainer)
+void sendChatMessageToClient(int sock, char *chatClient, char *chatMessage, char *serverMsgContainer, bool sendInstant)
 {
     memset(serverMsgContainer, 0, sizeof(serverMsgContainer));
 
@@ -73,11 +75,11 @@ void sendChatMessageToClient(int sock, char *chatClient, char *chatMessage, char
     dataObject sendObject;
     convertChatObjectToDataObject(&toMessage, &sendObject);
     convertDataObjectToDataObjectString(&sendObject, serverMsgContainer);
-    write(sock, serverMsgContainer, MAX_BUF);
+    if (sendInstant == true) write(sock, serverMsgContainer, MAX_BUF);
 }
 
 //# split command process
-void commandCenter(dataObject *income, userSocketObject *users, char *serverComment, char *sendMsg, int i)
+void commandCenter(dataObject *income, char *serverComment, char *sendMsg, int i)
 {
     if (income->cmdCode == COMMAND_LOGIN || income->cmdCode == COMMAND_LOGOUT)
     {
@@ -114,14 +116,23 @@ void commandCenter(dataObject *income, userSocketObject *users, char *serverComm
 
         chatObject fromMessage;
         convertChatStringToChatObject(income->body, &fromMessage);
-
+        
+        //# add to mailingList to send when target is offline
         if ((targetSock = getUserSockByNickname(fromMessage.client, users)) == -1)
         {
+            for (int i=0; i<MAX_CLIENT; i++) {
+                if (mailingList[i].reserved == false) {
+                    mailingList->reserved = true;
+                    strcpy(mailingList->target, fromMessage.client);
+                    sendChatMessageToClient(-1, users[i].nickname, fromMessage.message, mailingList->message, false);
+                    return;
+                }
+            }
             sprintf(serverComment, "nickname '%s' is not online", fromMessage.client);
             respondToClient(users[i].sock, RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
             return;
         }
-        sendChatMessageToClient(targetSock, users[i].nickname, fromMessage.message, sendMsg);
+        sendChatMessageToClient(targetSock, users[i].nickname, fromMessage.message, sendMsg, true);
     }
     else
         respondToClient(users[i].sock, RESPONSE_ERROR, "UnAcceptable Command Inputed", sendMsg);
@@ -134,8 +145,6 @@ int main(int argc, char **argv)
 
     struct sockaddr_in clientaddr, serveraddr;
     fd_set readfds, otherfds, allfds;
-    struct timeval tv;
-    userSocketObject users[MAX_CLIENT];
     connectObject connectInfo;
 
     //# argument option
@@ -146,7 +155,7 @@ int main(int argc, char **argv)
     }
 
     //# set tcpServerConnectionInfo
-    sprintf(connectInfo.ip, "192.168.0.4");
+    sprintf(connectInfo.ip, "127.0.0.1");
     connectInfo.port = atoi(argv[3]);
 
     //# server socket error handle
@@ -186,19 +195,23 @@ int main(int argc, char **argv)
     fprintf(stdout, "\nTCP iomux multiflexing Server Starting ... on %s:%d\n", connectInfo.ip, connectInfo.port);
 
     //# run server task forever
-    for (int i = 0; i < MAX_CLIENT; i++)
+    for (int i = 0; i < MAX_CLIENT; i++) {
+        mailingList[i].reserved = false;
         users[i].sock = -1;
+    }
     while (1)
     {
         allfds = readfds;
         state = select(maxfd + 1, &allfds, NULL, NULL, NULL);
 
         //# MultiCast Server : Deploy tcp_Iomux_Server_ConnectInfo
+        //printf("[System] multiCasting iomux multiflexing server connect Info[%s:%d]\n", connectInfo.ip, connectInfo.port);
         //broadConnectInformation();
 
         //# Server Socket - accept from client and save to userObject
         if (FD_ISSET(server_sockfd, &allfds))
         {
+
             //# return error message to client
             if (getClientNumber(users) == MAX_CLIENT)
             {
@@ -230,7 +243,7 @@ int main(int argc, char **argv)
         }
 
         //# check whether any message have been received
-        for (int i = 0; i <= getClientNumber(users); i++)
+        for (int i = 0; i < MAX_CLIENT; i++)
         {
             if ((sockfd = users[i].sock) == -1)
                 continue;
@@ -249,7 +262,7 @@ int main(int argc, char **argv)
                     dataObject income;
                     ;
                     convertDataObjectStringToDataObject(recvMsg, &income);
-                    commandCenter(&income, users, serverComment, sendMsg, i);
+                    commandCenter(&income, serverComment, sendMsg, i);
                 }
                 else
                 {
@@ -266,6 +279,13 @@ int main(int argc, char **argv)
                 if (--state <= 0)
                     break;
             }
+        }
+
+        //# check whether any message have been reserved to send
+        for (int i = 0; i < MAX_CLIENT; i++) {
+            int sock;
+            if (mailingList[i].reserved == true && (sock == getUserSockByNickname(mailingList[i].target, users)) != -1) 
+                write(sock, mailingList->message, MAX_BUF);
         }
     }
 }
