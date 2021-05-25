@@ -140,12 +140,34 @@ void commandCenter(dataObject *income, char *serverComment, char *sendMsg, int i
         respondToClient(users[i].sock, RESPONSE_ERROR, "UnAcceptable Command Inputed", sendMsg);
 }
 
+void initializeMultiSock(int *multi_sock, struct sockaddr_in *multiaddr, connectObject *connectInfo, char **argv) {
+    struct ifreq ifr;
+
+    memset(connectInfo->ip, 0, SIZE_IP);    
+    int ip_sock = socket(AF_INET, SOCK_DGRAM, 0);
+    strncpy(ifr.ifr_name, "eth0", IFNAMSIZ);
+
+    if (ioctl(ip_sock, SIOCGIFADDR, &ifr) < 0)
+        perror("Error ");
+    else
+        inet_ntop(AF_INET, ifr.ifr_addr.sa_data+2, connectInfo->ip, SIZE_IP);
+
+  	connectInfo->port = atoi(argv[3]);
+
+    *multi_sock=socket(PF_INET, SOCK_DGRAM, 0); // Create UDP Socket
+ 	memset(multiaddr, 0, sizeof(multiaddr));
+	multiaddr->sin_family=AF_INET;
+	multiaddr->sin_addr.s_addr=inet_addr(argv[1]); //Multicast IP
+	multiaddr->sin_port=htons(atoi(argv[2])); //Multicast Port
+}
+
 int main(int argc, char **argv)
 {
     int server_sockfd, client_sockfd, sockfd;
     int state = 0, client_len, maxfd;
+    int multi_sock;
 
-    struct sockaddr_in clientaddr, serveraddr;
+    struct sockaddr_in clientaddr, serveraddr, multiaddr;
     fd_set readfds, otherfds, allfds;
     connectObject connectInfo;
 
@@ -156,9 +178,8 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    //# set tcpServerConnectionInfo
-    sprintf(connectInfo.ip, "127.0.0.1");
-    connectInfo.port = atoi(argv[3]);
+    //# set udpServerConnectionInfo
+    initializeMultiSock(&multi_sock, &multiaddr, &connectInfo, argv);
 
     //# server socket error handle
     if ((server_sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -194,13 +215,22 @@ int main(int argc, char **argv)
     FD_SET(server_sockfd, &readfds);
 
     fprintf(stdout, "\nUDP multiCast Server Starting ... on %s:%d", argv[1], atoi(argv[2]));
-    fprintf(stdout, "\nTCP iomux multiflexing Server Starting ... on %s:%d\n", connectInfo.ip, connectInfo.port);
-
-    //# run server task forever
+    fprintf(stdout, "\nTCP iomux multiflexing Server Starting ... on %s:%d\n\n", connectInfo.ip, connectInfo.port);
+    
     for (int i = 0; i < MAX_CLIENT; i++) {
         mailingList[i].reserved = false;
         users[i].sock = -1;
     }
+    
+    
+    char connectMessage[MAX_BUF];
+    memset(connectMessage, 0, MAX_BUF);
+
+    dataObject broadCast;
+	convertConnectObjectToDataObject(&connectInfo, &broadCast);
+    convertDataObjectToDataObjectString(&broadCast, connectMessage);
+    
+    //# run server task forever
     while (1)
     {
         struct timeval timer = {1, 0};
@@ -211,7 +241,7 @@ int main(int argc, char **argv)
 
         //# MultiCast Server : Deploy tcp_Iomux_Server_ConnectInfo
         printf("[System] multiCasting iomux multiflexing server connect Info[%s:%d]\n", connectInfo.ip, connectInfo.port);
-        //broadConnectInformation();
+        sendto(multi_sock, connectMessage, MAX_BUF, 0, (struct sockaddr *)&multiaddr, sizeof(multiaddr));
 
         //# Server Socket - accept from client and save to userObject
         if (FD_ISSET(server_sockfd, &allfds))
@@ -293,4 +323,5 @@ int main(int argc, char **argv)
                 write(sock, mailingList->message, MAX_BUF);
         }
     }
+    close(multi_sock);
 }
