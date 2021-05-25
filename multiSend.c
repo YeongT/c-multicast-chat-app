@@ -27,16 +27,15 @@ int main(int argc, char *argv[])
 	}
 
   ip_sock = socket(AF_INET, SOCK_DGRAM, 0);
-  strncpy(ifr.ifr_name, "enp0s3", IFNAMSIZ);
+  strncpy(ifr.ifr_name, "eth0", IFNAMSIZ);
 
   if (ioctl(ip_sock, SIOCGIFADDR, &ifr) < 0)
     printf("Error");
   else
     inet_ntop(AF_INET, ifr.ifr_addr.sa_data+2, connectInfo.ip, 15);
 
-  printf("%s", connectInfo.ip);
-  
-  connectInfo.port = atoi(argv[2]);
+  	connectInfo.port = atoi(argv[2]);
+  	printf("%s:%d\n", connectInfo.ip, connectInfo.port);
 
 	serv_sock=socket(PF_INET, SOCK_DGRAM, 0); // Create UDP Socket
  	memset(&mul_addr, 0, sizeof(mul_addr));
@@ -47,18 +46,24 @@ int main(int argc, char *argv[])
 	int time_live=2;
 	setsockopt(serv_sock, IPPROTO_IP, IP_MULTICAST_TTL, (void*)&time_live, sizeof(time_live));
 
+
 	// Specify the multicast Group	
 	join_addr.imr_multiaddr.s_addr=inet_addr(argv[1]);
 	// Accept multicast from any interface
 	join_addr.imr_interface.s_addr=htonl(INADDR_ANY);
   
+	
+	dataObject broadCast;
+	convertConnectObjectToDataObject(&connectInfo, &broadCast);
+	convertDataObjectToDataObjectString(&broadCast, message);
+
 	while(1)
 	{
-		dataObject broadCast;
-		convertConnectObjectToDataObject(&connectInfo, &broadCast);
-		convertDataObjectToDataObjectString(&broadCast, message);
+		sendto(serv_sock, message, MAX_BUF, 0, (struct sockaddr *)&mul_addr, sizeof(mul_addr));
+		fprintf(stdout, "Message Sending...\n");
 	}
 	close(serv_sock);
+
 	return 0;
 }
 

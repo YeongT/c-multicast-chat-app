@@ -7,6 +7,8 @@
 #define SIZE_CMD_CODE sizeof(int)
 #define SIZE_STATUS_CODE sizeof(int)
 #define SIZE_OPTION 30
+#define SIZE_IP 15
+#define SIZE_PORT 4
 #define SIZE_MESSAGE 1024
 
 #define COMMAND_RESULT 1000
@@ -15,6 +17,7 @@
 #define COMMAND_CHECK 1003
 #define COMMAND_CHAT 1004
 #define COMMAND_MULTICAST 1005
+#define COMMAND_VITAL 1006
 
 #define RESPONSE_LOGIN_SUCCESS 2000
 #define RESPONSE_LOGIN_FAILED 5000
@@ -158,11 +161,18 @@ typedef struct connectFrame
 
 void convertConnectStringToConnectObject(char *originConnectString, connectObject *targetConnectObject)
 {
-    // memcpy(targetConnectObject->ip, originBodyString, 15);
-    // memcpy(targetConnectObject->port, &originConnectString[15], 4);
+    char portText[4];
+    memset(targetConnectObject->ip, 0, SIZE_IP);
+    memcpy(targetConnectObject->ip, originConnectString, 15);
+    memset(portText, 0, SIZE_PORT);
+    memcpy(portText, &originConnectString[SIZE_IP], SIZE_PORT);
+    targetConnectObject->port = atoi(portText);
 }
 
 void convertConnectObjectToDataObject(connectObject *originConnectObject, dataObject *targetDataObject)
 {
-    //얜 뭐하는 함수임??   ConnectObject를 DataObject로 바꿔주는
+    targetDataObject->cmdCode = COMMAND_MULTICAST;
+    memset(targetDataObject->body, 0, SIZE_IP + SIZE_PORT);
+    memcpy(targetDataObject->body, originConnectObject->ip, SIZE_IP);
+    convertIntegerToAscii(originConnectObject->port, &targetDataObject->body[SIZE_IP]);
 }

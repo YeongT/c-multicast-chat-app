@@ -7,6 +7,8 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
 
 //# share profile with server
 #include "define.h"
@@ -201,11 +203,14 @@ int main(int argc, char **argv)
     }
     while (1)
     {
+        struct timeval timer = {1, 0};
+        timer.tv_sec = 1;
+        
         allfds = readfds;
-        state = select(maxfd + 1, &allfds, NULL, NULL, NULL);
+        state = select(maxfd + 1, &allfds, (fd_set *)0, (fd_set *)0, &timer);
 
         //# MultiCast Server : Deploy tcp_Iomux_Server_ConnectInfo
-        //printf("[System] multiCasting iomux multiflexing server connect Info[%s:%d]\n", connectInfo.ip, connectInfo.port);
+        printf("[System] multiCasting iomux multiflexing server connect Info[%s:%d]\n", connectInfo.ip, connectInfo.port);
         //broadConnectInformation();
 
         //# Server Socket - accept from client and save to userObject

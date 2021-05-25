@@ -12,7 +12,7 @@ int main(int argc, char *argv[])
 {
 	int recv_sock;
 	int str_len;
-	char buf[BUF_SIZE+1];
+	char buf[MAX_BUF];
 	struct sockaddr_in addr;
 	struct sockaddr_in from_addr;
 	struct ip_mreq join_addr;
@@ -56,10 +56,10 @@ int main(int argc, char *argv[])
   
 	while(1)
 	{
-		memset(buf, 0, BUF_SIZE);
+		memset(buf, 0, MAX_BUF);
 
 		int add_sz = sizeof(from_addr);
-		str_len=recvfrom(recv_sock, buf, BUF_SIZE, 0, (struct sockaddr*)&from_addr, &add_sz);
+		str_len=recvfrom(recv_sock, buf, MAX_BUF, 0, (struct sockaddr*)&from_addr, &add_sz);
 		dataObject receive;
         convertDataObjectStringToDataObject(buf, &receive);
         
@@ -68,8 +68,7 @@ int main(int argc, char *argv[])
         
 
 		if(str_len < 0) break;
-		
-		printf("FROM [%s] : %s", (char*)inet_ntoa((struct in_addr)from_addr.sin_addr), buf);
+		printf("HELLO! %s : %d\n", tcpInfo.ip, tcpInfo.port);
 	}
 	close(recv_sock);
 	
