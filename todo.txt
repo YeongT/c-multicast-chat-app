@@ -32,8 +32,8 @@
 //  # ./client $multi_cast_ip $port 
 //  < [multicast_server] send iomux_server ip & port using multicast
 //
-//  * [client] ./tcp_connect $iomux_server_ip $port (open socket)
-//  * [iomux_server] accept tcp connection
+//  * [client] ./tcp_connect $iomux_server_ip $port (open socket) - temp connection
+//  * [iomux_server] accept tcp connection & connect to target client-iomux_server using tcp and save sock
 //
 //  * while loop started
 //    # login $nickname
@@ -68,3 +68,44 @@
 //  * [client] close tcp connection(close socket)
 //  * program ended(return 0)
 //
+
+//Heartbeat
+if (0 && fd_num == 0)
+{
+    printf("Heartbeat to Server~~\n");
+
+    char sendMsg[MAX_BUF], recvMsg[MAX_BUF];
+
+    optionObject heartbeat;
+    memset(heartbeat.argument, 0, sizeof(heartbeat.argument));
+    strcpy(heartbeat.argument, "tprtm");
+
+    memset(sendMsg, 0, sizeof(sendMsg));
+    memset(recvMsg, 0, sizeof(recvMsg));
+
+    dataObject send, receive;
+    convertOptionObjectToDataObject(COMMAND_CHECK, &heartbeat, &send);
+    convertDataObjectToDataObjectString(&send, sendMsg);
+
+    write(sock, sendMsg, sizeof(sendMsg));
+
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+    continue;
+}
+
+
+//USER LIST
+else if (!strcmp(splitArray[0], "/info"))
+{
+    char sendMsg[MAX_BUF], recvMsg[MAX_BUF];
+
+    optionObject info;
+    memset(info.argument, 0, sizeof(info.argument));
+    // fgets(info.argument, sizeof(info.argument), "a");
+    dataObject send, receive;
+    convertOptionObjectToDataObject(COMMAND_CHECK, &info, &send);
+    convertDataObjectToDataObjectString(&send, sendMsg);
+
+    write(sock, sendMsg, sizeof(sendMsg));
+}

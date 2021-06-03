@@ -1,5 +1,11 @@
 #include <string.h>
+#include <unistd.h>
+#include <string.h>
 #include <stdbool.h>
+#include <time.h>
+
+#include <arpa/inet.h>
+#include <sys/socket.h>
 
 #define MAX_CLIENT 100
 #define MAX_BUF (SIZE_STATUS_CODE + SIZE_OPTION + SIZE_MESSAGE)
@@ -24,6 +30,13 @@
 #define RESPONSE_CHECK_ONLINE 2001
 #define RESPONSE_CHECK_OFFLINE 5001
 #define RESPONSE_ERROR -1
+
+void error_handling(char *message)
+{
+    fputs(message, stderr);
+    fputc('\n', stderr);
+    exit(1);
+}
 
 void convertIntegerToAscii(int integer, char *string)
 {
@@ -109,7 +122,7 @@ void convertResultObjectToDataObject(resultObject *originResultObject, dataObjec
 {
     char statusCodeString[SIZE_STATUS_CODE];
     memset(statusCodeString, 0, SIZE_STATUS_CODE);
-    memset(targetDataObject->body, 0, SIZE_STATUS_CODE + SIZE_MESSAGE);
+    memset(targetDataObject->body, 0, MAX_BUF - SIZE_CMD_CODE);
 
     targetDataObject->cmdCode = COMMAND_RESULT;
     convertIntegerToAscii(originResultObject->status, statusCodeString);
@@ -130,7 +143,7 @@ void convertOptionStringToOptionObject(char *originOptionString, optionObject *t
 void convertOptionObjectToDataObject(int cmdCode, optionObject *originOptionObject, dataObject *targetDataObject)
 {
     targetDataObject->cmdCode = cmdCode;
-    memset(targetDataObject->body, 0, SIZE_OPTION);
+    memset(targetDataObject->body, 0, MAX_BUF - SIZE_CMD_CODE);
     memcpy(targetDataObject->body, originOptionObject->argument, SIZE_OPTION);
 }
 
@@ -148,9 +161,10 @@ void convertChatStringToChatObject(char *originChatString, chatObject *targetCha
 
 void convertChatObjectToDataObject(chatObject *originChatObject, dataObject *targetDataObject)
 {
-    memset(targetDataObject->body, 0, SIZE_OPTION + SIZE_MESSAGE);
-    memcpy(targetDataObject->body, originChatObject->client, SIZE_OPTION);
-    memcpy(&targetDataObject->body[SIZE_OPTION], originChatObject->message, SIZE_MESSAGE);
+    targetDataObject->cmdCode = COMMAND_CHAT;
+    memset(targetDataObject->body, 0, MAX_BUF - SIZE_CMD_CODE);
+    strcpy(targetDataObject->body, originChatObject->client);
+    strcpy(&targetDataObject->body[SIZE_OPTION], originChatObject->message);
 }
 
 typedef struct connectFrame
@@ -172,7 +186,8 @@ void convertConnectStringToConnectObject(char *originConnectString, connectObjec
 void convertConnectObjectToDataObject(connectObject *originConnectObject, dataObject *targetDataObject)
 {
     targetDataObject->cmdCode = COMMAND_MULTICAST;
-    memset(targetDataObject->body, 0, SIZE_IP + SIZE_PORT);
+    memset(targetDataObject->body, 0, MAX_BUF - SIZE_CMD_CODE);
     memcpy(targetDataObject->body, originConnectObject->ip, SIZE_IP);
     convertIntegerToAscii(originConnectObject->port, &targetDataObject->body[SIZE_IP]);
 }
+
