@@ -44,18 +44,26 @@ void convertIntegerToAscii(int integer, char *string)
     return;
 }
 
-int removeNullCharacterFromString(char *origin, char *target)
+int splitStringByCharacter(char* originString, char divider, char **input) {
+	int count=0, copyHeader=0;
+	for (int current=0; current<strlen(originString); current++) {
+		if(originString[current] == ' ') {
+			count++;
+			copyHeader=0;
+			continue;
+		}
+		input[count][copyHeader++] = originString[current];
+	}
+	return count+1;
+}
+
+void removeEndKeyFromString(char *message)
 {
-    int current = 0;
-    for (int i = 0; i < sizeof(origin); i++)
-    {
-        if (origin[i] != '\0')
-        {
-            strcpy(&target[current], &origin[i]);
-            current++;
-        }
-    }
-    return sizeof(origin) - current;
+	for (int i=0; ; i++)
+		if(!message[i]) {
+			message[i-1] = '\0';
+			break;
+		}
 }
 
 //extract cmdCode text from string to return casted integer

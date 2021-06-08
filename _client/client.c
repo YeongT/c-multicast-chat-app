@@ -4,81 +4,8 @@
 //# share profile with server
 #include "../define.h"
 
-int split(char *str, char c, char ***arr)
-{
-	int count = 1;
-	int token_len = 1;
-	int i = 0;
-	char *p;
-	char *t;
-
-	p = str;
-	// strcpy(p, str);
-
-	while (*p != '\0')
-	{
-		if (*p == c)
-			count++;
-		p++;
-	}
-
-	*arr = (char **)malloc(sizeof(char *) * count);
-	if (*arr == NULL)
-		exit(1);
-
-	p = str;
-	while (*p != '\0')
-	{
-		if (*p == c)
-		{
-			(*arr)[i] = (char *)malloc(sizeof(char) * token_len);
-			if ((*arr)[i] == NULL)
-				exit(1);
-
-			token_len = 0;
-			i++;
-		}
-		p++;
-		token_len++;
-	}
-	(*arr)[i] = (char *)malloc(sizeof(char) * token_len);
-	if ((*arr)[i] == NULL)
-		exit(1);
-
-	i = 0;
-	p = str;
-	t = ((*arr)[i]);
-	while (*p != '\0')
-	{
-		if (*p != c && *p != '\0')
-		{
-			*t = *p;
-			t++;
-		}
-		else
-		{
-			*t = '\0';
-			i++;
-			t = ((*arr)[i]);
-		}
-		p++;
-	}
-
-	return count;
-}
-
-void removeEndKeyFromString(char *recvMsg)
-{
-	int i = 0;
-	while (true)
-	{
-		if (recvMsg[i])
-			i++;
-		else
-			break;
-	}
-	recvMsg[i - 1] = '\0';
-}
+bool chatStatus = false;
+dataObject sendData, recvData;
 
 void initializeClientMultiSock(int *multiSock, char **argv)
 {
@@ -147,77 +74,136 @@ void startClientIomuxServer(fd_set *reads, int *fd_num, int *fd_max)
 	FD_SET(clientIomuxSock, reads);
 	*fd_max = clientIomuxSock;
 
-	fprintf(stdout, "\n[SYSTEM] client TCP one-way multiPlexing Server Starting ... on %d\n", clientPort);
+	fprintf(stdout, "\n[SYSTEM] client one-way TCP multiPlexing Server Starting ... on %d\n", clientPort);
 }
 
-void executeHelpCenter(int helpCode) {
+void executeHelpCenter(int helpCode)
+{
 	/*
 		all : 0
 		chat : 1
-		check : 2
+		
 	*/
-	switch(helpCode) {
-
+	switch (helpCode)
+	{
+	case 0:
+		printf("\n\n [HELP] 특정 명령어에 대한 자세한 내용이 필요하면 help [명령어 이름]을 입력하세요.\n");
+		printf(">  명령어 종류는 아래와 같습니다.\n");
+		printf(">  chat	다른 유저와 채팅을 하고 싶을 때 사용합니다.\n");
+		printf(">  logout	서버에 로그아웃 합니다.\n");
+		break;
+	case 1:
+		printf("\n\n [CHAT] 다른 유저와 채팅을 시도합니다.\n");
+		printf(">  chat [닉네임]\n");
+		printf(">  채팅 연결은 유저의 온라인 상태 여부에 따라 달라집니다.\n");
+		printf(">  유저의 상태가 온라인이면 채팅이 시작됩니다.\n");
+		printf(">  채팅이 시작되면 메시지를 입력하여 대화할 수 있습니다.\n");
+		printf(">  유저의 상태가 오프라인이면 연결되지 않습니다.\n");
+		break;
 	}
 }
 
-void clientCommandCenter(dataObject *sendData, dataObject *recvData, char *sendMsg, char *recvMsg, int tcpSock, bool *chatStatus, chatObject *sendChat)
+void clientCommandCenter(char *sendMsg, char *recvMsg, int tcpSock, chatObject *sendChat)
 {
-	char **input = NULL;
-	int columnCount = split(recvMsg, ' ', &input);
-
-	// select() in chat status
-	if (*chatStatus) {
-		if (strcmp(recvMsg, "/exit") == 0) {
+	if (chatStatus)
+	{
+		if (strcmp(recvMsg, "/exit") == 0)
+		{
 			fprintf(stdout, "[System] chatRoom with '%s' closed.\n", sendChat->client);
-			*chatStatus = false;
+			chatStatus = false;
 			return;
 		}
-		
+
 		memset(sendChat->message, 0, SIZE_MESSAGE);
 		memcpy(sendChat->message, recvMsg, SIZE_MESSAGE);
-			
+
 		memset(sendMsg, 0, MAX_BUF);
-		convertChatObjectToDataObject(sendChat, sendData);
-		convertDataObjectToDataObjectString(sendData, sendMsg);
+		convertChatObjectToDataObject(sendChat, &sendData);
+		convertDataObjectToDataObjectString(&sendData, sendMsg);
 		write(tcpSock, sendMsg, MAX_BUF);
+		return;
 	}
-	else if (strcmp(input[0], "chat") == 0)
+
+	// assign two dimension char array
+	char **input;
+	input = (char **)malloc(sizeof(char *) * 5);
+	for (int i = 0; i < 5; i++)
 	{
-		if (columnCount != 2) {
+		input[i] = (char *)malloc(sizeof(char) * SIZE_OPTION);
+		memset(input[i], 0, sizeof(char) * SIZE_OPTION);
+	}
+
+	// divide string into array
+	int columnCount = splitStringByCharacter(recvMsg, ' ', input);
+	if (strcmp(input[0], "chat") == 0)
+	{
+		if (columnCount != 2)
+		{
 			executeHelpCenter(1);
 			return;
 		}
-		
-		memset(sendChat->client, 0, SIZE_OPTION);
-		strcpy(sendChat->client, input[1]);
 
-		//# open chat room to target
-		fprintf(stdout, "[System] chatRoom with '%s' opened. If you want to quit, type '/exit'\n", sendChat->client);
-		*chatStatus = true;
-	}
-	else if(false) {
+		//재엽 : CHECK 상대방 ONLINE
 
-	}
-	else if(false) {
+		optionObject check;
+		memset(sendMsg, 0, MAX_BUF);
+		memset(recvMsg, 0, MAX_BUF);
 
+		memset(check.argument, 0, SIZE_OPTION);
+		strcpy(check.argument, input[1]);
+
+		convertOptionObjectToDataObject(COMMAND_CHECK, &check, &sendData);
+		convertDataObjectToDataObjectString(&sendData, sendMsg);
+		write(tcpSock, sendMsg, MAX_BUF);
+
+		int str_len = read(tcpSock, recvMsg, MAX_BUF);
+		if (str_len == -1)
+			error_handling("read() error!");
+
+		resultObject result;
+		convertDataObjectStringToDataObject(recvMsg, &recvData);
+		convertResultStringToResultObject(recvData.body, &result);
+		fprintf(stdout, "==> [Server] : %s\n", result.message);
+		// fprintf(stdout, "==> Check Status : %d\n", result.status);
+
+		if (result.status != 5001)
+		{
+			memset(sendChat->client, 0, SIZE_OPTION);
+			strcpy(sendChat->client, input[1]);
+
+			//# open chat room to target
+			fprintf(stdout, "[System] chatRoom with '%s' opened. If you want to quit, type '/exit'\n", sendChat->client);
+			chatStatus = true;
+		}else{
+			// fprintf(stdout, "[System] chatRoom with '%s' opened. If you want to quit, type '/exit'\n", sendChat->client);
+		}
 	}
-	else if(strcmp(input[0], "logout") == 0) {
+	else if (false)
+	{
+	}
+	else if (false)
+	{
+	}
+	else if (strcmp(input[0], "logout") == 0)
+	{
 		fprintf(stdout, "\nGood Bye!\n");
 		close(tcpSock);
 		exit(1);
 	}
-	else executeHelpCenter(0);
+	else
+		executeHelpCenter(0);
+
+	for (int i = 0; i < 5; i++)
+		free(input[i]);
+	free(input);
 }
 
 int main(int argc, char *argv[])
 {
 	int multiSock, tcpSock;
 	struct sockaddr_in from_addr;
-	
-	bool chatStatus = false;
+
 	connectObject tcpInfo;
-	dataObject sendData, recvData;
 	chatObject sendChat, recvChat;
 
 	if (argc != 3)
@@ -325,23 +311,24 @@ int main(int argc, char *argv[])
 						exit(1);
 
 					removeEndKeyFromString(recvMsg);
-					clientCommandCenter(&sendData, &recvData, sendMsg, recvMsg, tcpSock, &chatStatus, &sendChat);
+					clientCommandCenter(sendMsg, recvMsg, tcpSock, &sendChat);
 					continue;
 				}
 
 				int str_len = read(tcpSock, recvMsg, MAX_BUF);
-				if (str_len < 0)
-					error_handling("read() error!");
+				if (str_len <= 0)
+					error_handling("\n\n[ERROR] Server Connection Lost!");
 
 				convertDataObjectStringToDataObject(recvMsg, &recvData);
-				switch(recvData.cmdCode) {
-					case COMMAND_CHAT:
-						convertChatStringToChatObject(recvData.body, &recvChat);
-						printf("> [Message from '%s'] : %s\n", recvChat.client, recvChat.message);
-						break;
-					default:
-						fprintf(stdout, "\n\n[LINE 343 : SELECT RECV DEFAULT HANDLE] %s\n\n", recvData.body);
-						break;
+				switch (recvData.cmdCode)
+				{
+				case COMMAND_CHAT:
+					convertChatStringToChatObject(recvData.body, &recvChat);
+					printf("> [Message from '%s'] : %s\n", recvChat.client, recvChat.message);
+					break;
+				default:
+					fprintf(stdout, "\n\n[LINE 343 : SELECT RECV DEFAULT HANDLE] %s\n\n", recvData.body);
+					break;
 				}
 			}
 	}

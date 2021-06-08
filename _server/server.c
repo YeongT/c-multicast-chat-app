@@ -19,7 +19,7 @@ typedef struct userFrame
 
 userSocketObject users[MAX_CLIENT];
 
-//# return valid client number
+//# return online client number
 int getClientNumber(userSocketObject *userList)
 {
     int count = 0;
@@ -55,7 +55,7 @@ void respondToClient(int sock, int status, char *message, char *serverMsgContain
     write(sock, serverMsgContainer, MAX_BUF);
 }
 
-//# sendMessageToClient
+//# sendChatMessageToClient
 void sendChatMessageToClient(int sock, char *chatClient, char *chatMessage, char *serverMsgContainer, bool sendInstant)
 {
     memset(serverMsgContainer, 0, SIZE_MESSAGE);
@@ -72,7 +72,7 @@ void sendChatMessageToClient(int sock, char *chatClient, char *chatMessage, char
 }
 
 //# split command process
-void commandCenter(dataObject *income, char *serverComment, char *sendMsg, int i)
+void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg, int i)
 {
     if (income->cmdCode == COMMAND_LOGIN || income->cmdCode == COMMAND_LOGOUT)
     {
@@ -100,8 +100,8 @@ void commandCenter(dataObject *income, char *serverComment, char *sendMsg, int i
     {
         optionObject vitalCheck;
         convertOptionStringToOptionObject(income->body, &vitalCheck);
-        sprintf(serverComment, "nickname '%s' is %s", vitalCheck.argument, getUserSockByNickname(vitalCheck.argument, users) != -1 ? "not online" : "online");
-        respondToClient(users[i].sock, getUserSockByNickname(vitalCheck.argument, users) != -1 ? RESPONSE_CHECK_OFFLINE : RESPONSE_CHECK_ONLINE, serverComment, sendMsg);
+        sprintf(serverComment, "nickname '%s' is %s", vitalCheck.argument, getUserSockByNickname(vitalCheck.argument, users) != -1 ? "online" : "not online");
+        respondToClient(users[i].sock, getUserSockByNickname(vitalCheck.argument, users) != -1 ? RESPONSE_CHECK_ONLINE : RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
     }
     else if (income->cmdCode == COMMAND_CHAT)
     {
@@ -129,7 +129,7 @@ void initializeMultiSock(int *multi_sock, struct sockaddr_in *multiaddr, connect
 
     memset(connectInfo->ip, 0, SIZE_IP);
     int ip_sock = socket(AF_INET, SOCK_DGRAM, 0);
-    strncpy(ifr.ifr_name, "eth0", IFNAMSIZ);
+    strncpy(ifr.ifr_name, "enp0s8", IFNAMSIZ);
 
     if (ioctl(ip_sock, SIOCGIFADDR, &ifr) < 0)
         perror("Error ");
@@ -297,7 +297,7 @@ int main(int argc, char **argv)
 
                     dataObject income;
                     convertDataObjectStringToDataObject(recvMsg, &income);
-                    commandCenter(&income, serverComment, sendMsg, i);
+                    serverCommandCenter(&income, serverComment, sendMsg, i);
                 }
                 else
                 {
