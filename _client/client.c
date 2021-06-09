@@ -87,7 +87,7 @@ void executeHelpCenter(int helpCode)
 	switch (helpCode)
 	{
 	case 0:
-		fprintf(stdout, "\n\n [HELP] 특정 명령어에 대한 자세한 내용이 필요하면 help [명령어 이름]을 입력하세요.\n");
+		fprintf(stdout, "\n [HELP] 특정 명령어에 대한 자세한 내용이 필요하면 help [명령어 이름]을 입력하세요.\n");
 		fprintf(stdout, ">  명령어 종류는 아래와 같습니다.\n");
 		fprintf(stdout, ">  chat	다른 유저와 채팅을 하고 싶을 때 사용합니다.\n");
 		fprintf(stdout, ">  logout	서버에 로그아웃 합니다.\n");
@@ -112,7 +112,7 @@ void clientCommandCenter(char *sendMsg, char *recvMsg, int tcpSock, chatObject *
 	{
 		if (strcmp(recvMsg, "/exit") == 0)
 		{
-			fprintf(stdout, "[System] chatRoom with '%s' closed.\n", sendChat->client);
+			fprintf(stdout, "[System] chatRoom with '%s' closed.\n\n", sendChat->client);
 			chatStatus = false;
 			return;
 		}

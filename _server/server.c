@@ -17,24 +17,20 @@ typedef struct userFrame
     char nickname[SIZE_OPTION];
 } userSocketObject;
 
-//# return online client number
-int getClientNumber(userSocketObject *userList)
+//# define userGroupObject
+typedef struct groupFrame
 {
-    int count = 0;
-    for (int i = 0; i < MAX_CLIENT; i++)
-        if (userList[i].sock != -1)
-            count++;
-    return count;
-}
+    char name[SIZE_OPTION];
+    userSocketObject *members[MAX_CLIENT];
+} userGroupObject;
 
-//# return sock using userName
-int getUserSockByNickname(char *userName, userSocketObject *userList)
+//# return userObject using userName
+userSocketObject* getUserObjectByNickname(char *userName, userSocketObject *userList)
 {
-    int sock = -1;
     for (int i = 0; i < MAX_CLIENT; i++)
         if (strcmp(userList[i].nickname, userName) == 0)
-            sock = userList[i].sock;
-    return sock;
+            return &userList[i];
+    return NULL;
 }
 
 //# sendResultToClient
@@ -76,7 +72,8 @@ void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg,
     {
         optionObject loginReq;
         convertOptionStringToOptionObject(income->body, &loginReq);
-        if (getUserSockByNickname(loginReq.argument, userList) == -1)
+        userSocketObject *target = getUserObjectByNickname(loginReq.argument, userList);
+        if (target == NULL)
         {
             strcpy(userList[userID].nickname, loginReq.argument);
             sprintf(serverComment, "Welcome user '%s'! Have a nice day!", userList[userID].nickname);
@@ -110,30 +107,27 @@ void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg,
     {
         optionObject vitalCheck;
         convertOptionStringToOptionObject(income->body, &vitalCheck);
-
-        int targetSock = getUserSockByNickname(vitalCheck.argument, userList);
-        if (targetSock != -1)
+        userSocketObject *target = getUserObjectByNickname(vitalCheck.argument, userList);
+        if (target != NULL)
         {
             sprintf(serverComment, "[INFO] nickname '%s' is trying to chat with you", userList[userID].nickname);
-            respondToClient(targetSock, RESPONSE_INFORMATION, serverComment, sendMsg);
+            respondToClient(target->sock, RESPONSE_INFORMATION, serverComment, sendMsg);
         }
-        sprintf(serverComment, "nickname '%s' is %s", vitalCheck.argument, targetSock != -1 ? "online" : "not online");
-        respondToClient(userList[userID].sock, targetSock != -1 ? RESPONSE_CHECK_ONLINE : RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
+        sprintf(serverComment, "nickname '%s' is %s", vitalCheck.argument, target != NULL ? "online" : "not online");
+        respondToClient(userList[userID].sock, target != NULL ? RESPONSE_CHECK_ONLINE : RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
     }
     else if (income->cmdCode == COMMAND_CHAT)
     {
-        int targetSock;
-
         chatObject fromMessage;
         convertChatStringToChatObject(income->body, &fromMessage);
-
-        if ((targetSock = getUserSockByNickname(fromMessage.client, userList)) == -1)
+        userSocketObject *target = getUserObjectByNickname(fromMessage.client, userList);
+        if (target == NULL)
         {
             sprintf(serverComment, "nickname '%s' is not online", fromMessage.client);
             respondToClient(userList[userID].sock, RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
             return;
         }
-        sendChatMessageToClient(targetSock, userList[userID].nickname, fromMessage.message, sendMsg, true);
+        sendChatMessageToClient(target->sock, userList[userID].nickname, fromMessage.message, sendMsg, true);
     }
     else
         respondToClient(userList[userID].sock, RESPONSE_ERROR, "Unknown Command Inputed", sendMsg);
@@ -267,7 +261,11 @@ int main(int argc, char **argv)
         {
 
             //# return error message to client
-            if (getClientNumber(users) == MAX_CLIENT)
+            int count = 0;
+            for (int i = 0; i < MAX_CLIENT; i++)
+                if (users[i].sock != -1)
+                    count++;
+            if (count == MAX_CLIENT)
             {
                 // => assign to other developer
                 perror("too many clients");
