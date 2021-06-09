@@ -2,6 +2,7 @@
     "files.associations": {
         "winsock2.h": "c",
         "define.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "multicast.h": "c"
     }
 }

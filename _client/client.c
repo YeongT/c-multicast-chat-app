@@ -1,48 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-//# share profile with server
+//# import define.h and multicast.h
 #include "../define.h"
+#include "../utils.h"
+#include "../multicast.h"
 
 bool chatStatus = false;
 dataObject sendData, recvData;
-
-void initializeClientMultiSock(int *multiSock, char **argv)
-{
-	struct sockaddr_in addr;
-	struct ip_mreq join_addr;
-
-	// Create UDP Socket
-	*multiSock = socket(PF_INET, SOCK_DGRAM, 0);
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr.sin_port = htons(atoi(argv[2]));
-
-	int on = 1;
-	setsockopt(*multiSock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-
-	// Bind socket
-	if (bind(*multiSock, (struct sockaddr *)&addr, sizeof(addr)) == -1)
-	{
-		error_handling("bind() error");
-		close(*multiSock);
-		exit(1);
-	}
-
-	// Specify the multicast Group
-	join_addr.imr_multiaddr.s_addr = inet_addr(argv[1]);
-	// Accept multicast from any interface
-	join_addr.imr_interface.s_addr = htonl(INADDR_ANY);
-
-	// Join Multicast Group
-	if ((setsockopt(*multiSock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void *)&join_addr, sizeof(join_addr))) < 0)
-	{
-		error_handling("SetsockOpt Join Error \n");
-		close(*multiSock);
-		exit(1);
-	}
-}
 
 void startClientIomuxServer(fd_set *reads, int *fd_num, int *fd_max)
 {

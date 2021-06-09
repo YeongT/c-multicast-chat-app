@@ -1,14 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/select.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-
-//# share profile with server
+//import define.h and multicast.h
 #include "../define.h"
+#include "../utils.h"
+#include "../group.h"
+#include "../multicast.h"
 
 //# define userSocketObject
 typedef struct userFrame
@@ -16,13 +13,6 @@ typedef struct userFrame
     int sock;
     char nickname[SIZE_OPTION];
 } userSocketObject;
-
-//# define userGroupObject
-typedef struct groupFrame
-{
-    char name[SIZE_OPTION];
-    userSocketObject *members[MAX_CLIENT];
-} userGroupObject;
 
 //# return userObject using userName
 userSocketObject* getUserObjectByNickname(char *userName, userSocketObject *userList)
@@ -133,30 +123,6 @@ void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg,
         respondToClient(userList[userID].sock, RESPONSE_ERROR, "Unknown Command Inputed", sendMsg);
 }
 
-//# start multiCast server and setup connect info
-void initializeMultiSock(int *multi_sock, struct sockaddr_in *multiaddr, connectObject *connectInfo, char **argv)
-{
-    struct ifreq ifr;
-
-    memset(connectInfo->ip, 0, SIZE_IP);
-    int ip_sock = socket(AF_INET, SOCK_DGRAM, 0);
-    strncpy(ifr.ifr_name, "eth0", IFNAMSIZ);
-
-    if (ioctl(ip_sock, SIOCGIFADDR, &ifr) < 0)
-        perror("Error ");
-    else
-        inet_ntop(AF_INET, ifr.ifr_addr.sa_data + 2, connectInfo->ip, SIZE_IP);
-
-    srand(time(NULL));
-    connectInfo->port = rand() % 1000 + 5000;
-
-    *multi_sock = socket(PF_INET, SOCK_DGRAM, 0); // Create UDP Socket
-    memset(multiaddr, 0, sizeof(multiaddr));
-    multiaddr->sin_family = AF_INET;
-    multiaddr->sin_addr.s_addr = inet_addr(argv[1]); //Multicast IP
-    multiaddr->sin_port = htons(atoi(argv[2]));      //Multicast Port
-}
-
 int main(int argc, char **argv)
 {
     int server_sockfd, client_sockfd, sockfd;
@@ -175,7 +141,7 @@ int main(int argc, char **argv)
     }
 
     //# set udpServerConnectionInfo
-    initializeMultiSock(&multi_sock, &multiaddr, &connectInfo, argv);
+    initializeServerMultiSock(&multi_sock, &multiaddr, &connectInfo, argv);
 
     //# server socket error handle
     if ((server_sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
