@@ -61,12 +61,12 @@ void startClientIomuxServer(fd_set *reads, int *fd_num, int *fd_max)
 	setsockopt(clientIomuxSock, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
 	if (bind(clientIomuxSock, (struct sockaddr *)&serv_adr, sizeof(serv_adr)) == -1)
 	{
-		printf("bind() error");
+		fprintf(stdout, "bind() error");
 		exit(0);
 	}
 	if (listen(clientIomuxSock, 5) == -1)
 	{
-		printf("listen() error");
+		fprintf(stdout, "listen() error");
 		exit(0);
 	}
 
@@ -74,7 +74,7 @@ void startClientIomuxServer(fd_set *reads, int *fd_num, int *fd_max)
 	FD_SET(clientIomuxSock, reads);
 	*fd_max = clientIomuxSock;
 
-	fprintf(stdout, "\n[SYSTEM] client one-way TCP multiPlexing Server Starting ... on %d\n", clientPort);
+	fprintf(stdout, "\n[SYSTEM] client one-way TCP multiPlexing Server Starting ... on %d\n\n", clientPort);
 }
 
 void executeHelpCenter(int helpCode)
@@ -82,25 +82,28 @@ void executeHelpCenter(int helpCode)
 	/*
 		all : 0
 		chat : 1
-		
+		show users : 2
 	*/
 	switch (helpCode)
 	{
 	case 0:
-		printf("\n\n [HELP] 특정 명령어에 대한 자세한 내용이 필요하면 help [명령어 이름]을 입력하세요.\n");
-		printf(">  명령어 종류는 아래와 같습니다.\n");
-		printf(">  chat	다른 유저와 채팅을 하고 싶을 때 사용합니다.\n");
-		printf(">  logout	서버에 로그아웃 합니다.\n");
+		fprintf(stdout, "\n\n [HELP] 특정 명령어에 대한 자세한 내용이 필요하면 help [명령어 이름]을 입력하세요.\n");
+		fprintf(stdout, ">  명령어 종류는 아래와 같습니다.\n");
+		fprintf(stdout, ">  chat	다른 유저와 채팅을 하고 싶을 때 사용합니다.\n");
+		fprintf(stdout, ">  logout	서버에 로그아웃 합니다.\n");
 		break;
 	case 1:
-		printf("\n\n [CHAT] 다른 유저와 채팅을 시도합니다.\n");
-		printf(">  chat [닉네임]\n");
-		printf(">  채팅 연결은 유저의 온라인 상태 여부에 따라 달라집니다.\n");
-		printf(">  유저의 상태가 온라인이면 채팅이 시작됩니다.\n");
-		printf(">  채팅이 시작되면 메시지를 입력하여 대화할 수 있습니다.\n");
-		printf(">  유저의 상태가 오프라인이면 연결되지 않습니다.\n");
+		fprintf(stdout, "\n\n [CHAT] 다른 유저와 채팅을 시도합니다.\n");
+		fprintf(stdout, ">  chat [닉네임]\n");
+		fprintf(stdout, ">  채팅 연결은 유저의 온라인 상태 여부에 따라 달라집니다.\n");
+		fprintf(stdout, ">  유저의 상태가 온라인이면 채팅이 시작됩니다.\n");
+		fprintf(stdout, ">  채팅이 시작되면 메시지를 입력하여 대화할 수 있습니다.\n");
+		fprintf(stdout, ">  유저의 상태가 오프라인이면 연결되지 않습니다.\n");
+		break;
+	case 2:
 		break;
 	}
+	fprintf(stdout, "\n");
 }
 
 void clientCommandCenter(char *sendMsg, char *recvMsg, int tcpSock, chatObject *sendChat)
@@ -143,11 +146,8 @@ void clientCommandCenter(char *sendMsg, char *recvMsg, int tcpSock, chatObject *
 			return;
 		}
 
-		//재엽 : CHECK 상대방 ONLINE
-
 		optionObject check;
 		memset(sendMsg, 0, MAX_BUF);
-		memset(recvMsg, 0, MAX_BUF);
 
 		memset(check.argument, 0, SIZE_OPTION);
 		strcpy(check.argument, input[1]);
@@ -156,30 +156,25 @@ void clientCommandCenter(char *sendMsg, char *recvMsg, int tcpSock, chatObject *
 		convertDataObjectToDataObjectString(&sendData, sendMsg);
 		write(tcpSock, sendMsg, MAX_BUF);
 
-		int str_len = read(tcpSock, recvMsg, MAX_BUF);
-		if (str_len == -1)
-			error_handling("read() error!");
-
-		resultObject result;
-		convertDataObjectStringToDataObject(recvMsg, &recvData);
-		convertResultStringToResultObject(recvData.body, &result);
-		fprintf(stdout, "==> [Server] : %s\n", result.message);
-		// fprintf(stdout, "==> Check Status : %d\n", result.status);
-
-		if (result.status != 5001)
-		{
-			memset(sendChat->client, 0, SIZE_OPTION);
-			strcpy(sendChat->client, input[1]);
-
-			//# open chat room to target
-			fprintf(stdout, "[System] chatRoom with '%s' opened. If you want to quit, type '/exit'\n", sendChat->client);
-			chatStatus = true;
-		}else{
-			// fprintf(stdout, "[System] chatRoom with '%s' opened. If you want to quit, type '/exit'\n", sendChat->client);
-		}
+		memset(sendChat->client, 0, SIZE_OPTION);
+		strcpy(sendChat->client, input[1]);
 	}
-	else if (false)
+	else if (strcmp(input[0], "users") == 0)
 	{
+		if (columnCount != 2)
+		{
+			executeHelpCenter(2);
+			return;
+		}
+		optionObject userReq;
+		memset(sendMsg, 0, MAX_BUF);
+
+		memset(userReq.argument, 0, SIZE_OPTION);
+		strcpy(userReq.argument, input[1]);
+
+		convertOptionObjectToDataObject(COMMAND_USERS, &userReq, &sendData);
+		convertDataObjectToDataObjectString(&sendData, sendMsg);
+		write(tcpSock, sendMsg, MAX_BUF);
 	}
 	else if (false)
 	{
@@ -208,7 +203,7 @@ int main(int argc, char *argv[])
 
 	if (argc != 3)
 	{
-		printf("Usage : %s <GroupIP> <PORT>\n", argv[0]);
+		fprintf(stdout, "Usage : %s <GroupIP> <PORT>\n", argv[0]);
 		exit(1);
 	}
 
@@ -231,7 +226,7 @@ int main(int argc, char *argv[])
 
 		if (tcpInfo.port != -1)
 		{
-			printf("[SYSTEM] connectInfo received! %s : %d\n", tcpInfo.ip, tcpInfo.port);
+			fprintf(stdout, "[SYSTEM] connectInfo received! %s : %d\n", tcpInfo.ip, tcpInfo.port);
 			break;
 		}
 	}
@@ -315,19 +310,42 @@ int main(int argc, char *argv[])
 					continue;
 				}
 
+				memset(recvMsg, 0, MAX_BUF);
 				int str_len = read(tcpSock, recvMsg, MAX_BUF);
 				if (str_len <= 0)
 					error_handling("\n\n[ERROR] Server Connection Lost!");
 
 				convertDataObjectStringToDataObject(recvMsg, &recvData);
+				resultObject result;
 				switch (recvData.cmdCode)
 				{
+				case COMMAND_RESULT:
+					convertDataObjectStringToDataObject(recvMsg, &recvData);
+					convertResultStringToResultObject(recvData.body, &result);
+
+					if (result.status == RESPONSE_CHECK_ONLINE || result.status == RESPONSE_CHECK_OFFLINE)
+					{
+						if (result.status == RESPONSE_CHECK_ONLINE)
+						{
+							fprintf(stdout, "[System] chatRoom with '%s' opened. If you want to quit, type '/exit'\n", sendChat.client);
+							chatStatus = true;
+						}
+						else
+							fprintf(stdout, "==> [CHECK] : %s\n", result.message);
+					}
+					else if (result.status == RESPONSE_INFORMATION)
+					{
+						fprintf(stdout, "==> [Server] : %s\n", result.message);
+					}
+					else
+						fprintf(stdout, "\n[LINE 316 : RESULT RECV DEFAULT HANDLE] %d / %s\n\n", result.status, result.message);
+					break;
 				case COMMAND_CHAT:
 					convertChatStringToChatObject(recvData.body, &recvChat);
-					printf("> [Message from '%s'] : %s\n", recvChat.client, recvChat.message);
+					fprintf(stdout, "> [Message from '%s'] : %s\n", recvChat.client, recvChat.message);
 					break;
 				default:
-					fprintf(stdout, "\n\n[LINE 343 : SELECT RECV DEFAULT HANDLE] %s\n\n", recvData.body);
+					fprintf(stdout, "\n[LINE 323 : SELECT RECV DEFAULT HANDLE] %s\n\n", recvData.body);
 					break;
 				}
 			}

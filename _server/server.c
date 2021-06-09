@@ -17,8 +17,6 @@ typedef struct userFrame
     char nickname[SIZE_OPTION];
 } userSocketObject;
 
-userSocketObject users[MAX_CLIENT];
-
 //# return online client number
 int getClientNumber(userSocketObject *userList)
 {
@@ -72,36 +70,55 @@ void sendChatMessageToClient(int sock, char *chatClient, char *chatMessage, char
 }
 
 //# split command process
-void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg, int i)
+void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg, userSocketObject *userList, int userID)
 {
-    if (income->cmdCode == COMMAND_LOGIN || income->cmdCode == COMMAND_LOGOUT)
+    if (income->cmdCode == COMMAND_LOGIN)
     {
         optionObject loginReq;
         convertOptionStringToOptionObject(income->body, &loginReq);
-        if (income->cmdCode == COMMAND_LOGOUT)
+        if (getUserSockByNickname(loginReq.argument, userList) == -1)
         {
-            memset(users[i].nickname, 0, sizeof(users[i].nickname));
-            respondToClient(users[i].sock, RESPONSE_LOGIN_FAILED, "goodbye", sendMsg);
-            return;
-        }
-
-        if (income->cmdCode == COMMAND_LOGIN && getUserSockByNickname(loginReq.argument, users) == -1)
-        {
-            strcpy(users[i].nickname, loginReq.argument);
-            sprintf(serverComment, "Welcome user '%s'! Have a nice day!", users[i].nickname);
-            respondToClient(users[i].sock, RESPONSE_LOGIN_SUCCESS, serverComment, sendMsg);
-            fprintf(stdout, "[System Login] user '%s' signed in to system.\n", users[i].nickname);
+            strcpy(userList[userID].nickname, loginReq.argument);
+            sprintf(serverComment, "Welcome user '%s'! Have a nice day!", userList[userID].nickname);
+            respondToClient(userList[userID].sock, RESPONSE_LOGIN_SUCCESS, serverComment, sendMsg);
+            fprintf(stdout, "[System Login] user '%s' signed in to system.\n", userList[userID].nickname);
             return;
         }
         sprintf(serverComment, "nickname '%s' is already in use", loginReq.argument);
-        respondToClient(users[i].sock, RESPONSE_LOGIN_FAILED, serverComment, sendMsg);
+        respondToClient(userList[userID].sock, RESPONSE_LOGIN_FAILED, serverComment, sendMsg);
+    }
+    else if (income->cmdCode == COMMAND_USERS)
+    {
+        optionObject userReq;
+        convertOptionStringToOptionObject(income->body, &userReq);
+
+        char userListString[MAX_CLIENT * SIZE_MESSAGE];
+        memset(userListString, 0, MAX_CLIENT * SIZE_OPTION);
+        if (strcmp(userReq.argument, "global") == 0)
+        {
+            sprintf(userListString, "Below users are online in group '%s'", userReq.argument);
+            for (int user = 0; user < MAX_CLIENT; user++) 
+                if (userList[user].sock != -1 && strcmp(userList[user].nickname, "") != 0)
+                {
+                    strcat(userListString,"\n  > ");
+                    strcat(userListString, userList[user].nickname);
+                }
+            respondToClient(userList[userID].sock, RESPONSE_INFORMATION, userListString, sendMsg);
+        }
     }
     else if (income->cmdCode == COMMAND_CHECK)
     {
         optionObject vitalCheck;
         convertOptionStringToOptionObject(income->body, &vitalCheck);
-        sprintf(serverComment, "nickname '%s' is %s", vitalCheck.argument, getUserSockByNickname(vitalCheck.argument, users) != -1 ? "online" : "not online");
-        respondToClient(users[i].sock, getUserSockByNickname(vitalCheck.argument, users) != -1 ? RESPONSE_CHECK_ONLINE : RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
+
+        int targetSock = getUserSockByNickname(vitalCheck.argument, userList);
+        if (targetSock != -1)
+        {
+            sprintf(serverComment, "[INFO] nickname '%s' is trying to chat with you", userList[userID].nickname);
+            respondToClient(targetSock, RESPONSE_INFORMATION, serverComment, sendMsg);
+        }
+        sprintf(serverComment, "nickname '%s' is %s", vitalCheck.argument, targetSock != -1 ? "online" : "not online");
+        respondToClient(userList[userID].sock, targetSock != -1 ? RESPONSE_CHECK_ONLINE : RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
     }
     else if (income->cmdCode == COMMAND_CHAT)
     {
@@ -110,16 +127,16 @@ void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg,
         chatObject fromMessage;
         convertChatStringToChatObject(income->body, &fromMessage);
 
-        if ((targetSock = getUserSockByNickname(fromMessage.client, users)) == -1)
+        if ((targetSock = getUserSockByNickname(fromMessage.client, userList)) == -1)
         {
             sprintf(serverComment, "nickname '%s' is not online", fromMessage.client);
-            respondToClient(users[i].sock, RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
+            respondToClient(userList[userID].sock, RESPONSE_CHECK_OFFLINE, serverComment, sendMsg);
             return;
         }
-        sendChatMessageToClient(targetSock, users[i].nickname, fromMessage.message, sendMsg, true);
+        sendChatMessageToClient(targetSock, userList[userID].nickname, fromMessage.message, sendMsg, true);
     }
     else
-        respondToClient(users[i].sock, RESPONSE_ERROR, "Unknown Command Inputed", sendMsg);
+        respondToClient(userList[userID].sock, RESPONSE_ERROR, "Unknown Command Inputed", sendMsg);
 }
 
 //# start multiCast server and setup connect info
@@ -129,7 +146,7 @@ void initializeMultiSock(int *multi_sock, struct sockaddr_in *multiaddr, connect
 
     memset(connectInfo->ip, 0, SIZE_IP);
     int ip_sock = socket(AF_INET, SOCK_DGRAM, 0);
-    strncpy(ifr.ifr_name, "enp0s8", IFNAMSIZ);
+    strncpy(ifr.ifr_name, "eth0", IFNAMSIZ);
 
     if (ioctl(ip_sock, SIOCGIFADDR, &ifr) < 0)
         perror("Error ");
@@ -202,15 +219,16 @@ int main(int argc, char **argv)
     fprintf(stdout, "\nUDP multiCast Server Starting ... on %s:%d", argv[1], atoi(argv[2]));
     fprintf(stdout, "\nTCP iomux multiplexing Server Starting ... on %s:%d\n\n", connectInfo.ip, connectInfo.port);
 
-    for (int i = 0; i < MAX_CLIENT; i++)
-        users[i].sock = -1;
-
     char connectMessage[MAX_BUF];
     memset(connectMessage, 0, MAX_BUF);
 
     dataObject broadCast;
     convertConnectObjectToDataObject(&connectInfo, &broadCast);
     convertDataObjectToDataObjectString(&broadCast, connectMessage);
+
+    userSocketObject users[MAX_CLIENT];
+    for (int i = 0; i < MAX_CLIENT; i++)
+        users[i].sock = -1;
 
     //# run server task forever
     time_t userTimer, multiTimer, now;
@@ -297,7 +315,7 @@ int main(int argc, char **argv)
 
                     dataObject income;
                     convertDataObjectStringToDataObject(recvMsg, &income);
-                    serverCommandCenter(&income, serverComment, sendMsg, i);
+                    serverCommandCenter(&income, serverComment, sendMsg, users, i);
                 }
                 else
                 {
