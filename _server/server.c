@@ -4,59 +4,11 @@
 //import define.h and multicast.h
 #include "../define.h"
 #include "../utils.h"
-#include "../group.h"
+#include "../methods.h"
 #include "../multicast.h"
 
-//# define userSocketObject
-typedef struct userFrame
-{
-    int sock;
-    char nickname[SIZE_OPTION];
-} userSocketObject;
-
-//# return userObject using userName
-userSocketObject* getUserObjectByNickname(char *userName, userSocketObject *userList)
-{
-    for (int i = 0; i < MAX_CLIENT; i++)
-        if (strcmp(userList[i].nickname, userName) == 0)
-            return &userList[i];
-    return NULL;
-}
-
-//# sendResultToClient
-void respondToClient(int sock, int status, char *message, char *serverMsgContainer)
-{
-    memset(serverMsgContainer, 0, sizeof(serverMsgContainer));
-
-    resultObject response;
-    response.status = status;
-    memset(response.message, 0, SIZE_MESSAGE);
-    strcpy(response.message, message);
-
-    dataObject respond;
-    convertResultObjectToDataObject(&response, &respond);
-    convertDataObjectToDataObjectString(&respond, serverMsgContainer);
-    write(sock, serverMsgContainer, MAX_BUF);
-}
-
-//# sendChatMessageToClient
-void sendChatMessageToClient(int sock, char *chatClient, char *chatMessage, char *serverMsgContainer, bool sendInstant)
-{
-    memset(serverMsgContainer, 0, SIZE_MESSAGE);
-
-    chatObject toMessage;
-    strcpy(toMessage.client, chatClient);
-    strcpy(toMessage.message, chatMessage);
-
-    dataObject sendObject;
-    convertChatObjectToDataObject(&toMessage, &sendObject);
-    convertDataObjectToDataObjectString(&sendObject, serverMsgContainer);
-    if (sendInstant == true)
-        write(sock, serverMsgContainer, MAX_BUF);
-}
-
-//# split command process
-void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg, userSocketObject *userList, int userID)
+//# FD_ISSET command Center
+void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg, userSocketObject *userList, userGroupObject *groupList, int userID)
 {
     if (income->cmdCode == COMMAND_LOGIN)
     {
@@ -69,6 +21,7 @@ void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg,
             sprintf(serverComment, "Welcome user '%s'! Have a nice day!", userList[userID].nickname);
             respondToClient(userList[userID].sock, RESPONSE_LOGIN_SUCCESS, serverComment, sendMsg);
             fprintf(stdout, "[System Login] user '%s' signed in to system.\n", userList[userID].nickname);
+            joinUserGroup(&groupList[0], &userList[userID]);
             return;
         }
         sprintf(serverComment, "nickname '%s' is already in use", loginReq.argument);
@@ -80,18 +33,28 @@ void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg,
         convertOptionStringToOptionObject(income->body, &userReq);
 
         char userListString[MAX_CLIENT * SIZE_MESSAGE];
-        memset(userListString, 0, MAX_CLIENT * SIZE_OPTION);
-        if (strcmp(userReq.argument, "global") == 0)
+        memset(userListString, 0, MAX_CLIENT * SIZE_MESSAGE);
+
+        userGroupObject *target = getGroupObjectByGroupName(groupList, userReq.argument);
+        if (target == NULL)
         {
-            sprintf(userListString, "Below users are online in group '%s'", userReq.argument);
-            for (int user = 0; user < MAX_CLIENT; user++) 
-                if (userList[user].sock != -1 && strcmp(userList[user].nickname, "") != 0)
-                {
-                    strcat(userListString,"\n  > ");
-                    strcat(userListString, userList[user].nickname);
-                }
-            respondToClient(userList[userID].sock, RESPONSE_INFORMATION, userListString, sendMsg);
+            sprintf(serverComment, "group '%s' is not exist", userReq.argument);
+            respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+            return;
         }
+
+        sprintf(userListString, "Below users are online in group '%s'", userReq.argument);
+        for (int user = 0; user < target->maxMember; user++)
+        {
+            if (target->members[user] == NULL)
+                continue;
+            if (target->members[user]->sock != -1 && strcmp(target->members[user]->nickname, "") != 0)
+            {
+                strcat(userListString, "\n  > ");
+                strcat(userListString, target->members[user]->nickname);
+            }
+        }
+        respondToClient(userList[userID].sock, RESPONSE_INFORMATION, userListString, sendMsg);
     }
     else if (income->cmdCode == COMMAND_CHECK)
     {
@@ -118,6 +81,106 @@ void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg,
             return;
         }
         sendChatMessageToClient(target->sock, userList[userID].nickname, fromMessage.message, sendMsg, true);
+    }
+    else if (income->cmdCode == COMMAND_GROUP_MAKE)
+    {
+        optionObject groupReq;
+        convertOptionStringToOptionObject(income->body, &groupReq);
+        userGroupObject *target = getGroupObjectByGroupName(groupList, groupReq.argument);
+        if (target == NULL)
+        {
+            bool result = generateGroupObject(groupList, MAX_GROUP_MEMBER, groupReq.argument);
+            if (result)
+            {
+                sprintf(serverComment, "group '%s' has been created", groupReq.argument);
+                respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+                return;
+            }
+            sprintf(serverComment, "[ERROR] Maximum number of groups exceeded.");
+            respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+            return;
+        }
+        sprintf(serverComment, "group '%s' is already exist", groupReq.argument);
+        respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+    }
+    else if (income->cmdCode == COMMAND_GROUP_CHECK_JOIN || income->cmdCode == COMMAND_GROUP_JOIN || income->cmdCode == COMMAND_GROUP_QUIT)
+    {
+        optionObject groupReq;
+        convertOptionStringToOptionObject(income->body, &groupReq);
+        userGroupObject *target = getGroupObjectByGroupName(groupList, groupReq.argument);
+        if (target == NULL)
+        {
+            sprintf(serverComment, "group '%s' is not exist", groupReq.argument);
+            respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+            return;
+        }
+
+        int memberNum = getUserIdFromGroupByUserSock(target, &userList[userID]);
+        switch (income->cmdCode)
+        {
+        case COMMAND_GROUP_CHECK_JOIN:
+            sprintf(serverComment, "nickname '%s' %s group '%s'", userList[userID].nickname, memberNum != -1 ? "joined in" : "not joined in", groupReq.argument);
+            respondToClient(userList[userID].sock, memberNum != -1 ? RESPONSE_GROUP_JOINED : RESPONSE_GROUP_NOT_JOINED, serverComment, sendMsg);
+            break;
+        case COMMAND_GROUP_JOIN:
+            if (memberNum != -1)
+            {
+                sprintf(serverComment, "nickname '%s' is already in group '%s'", userList[userID].nickname, groupReq.argument);
+                respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+            }
+            else
+            {
+                sprintf(serverComment, "nickname '%s' joined group '%s'!", userList[userID].nickname, groupReq.argument);
+                broadCastToGroup(target, &userList[userID], serverComment, sendMsg);
+                joinUserGroup(target, &userList[userID]);
+                sprintf(serverComment, "join group '%s' succeed.", groupReq.argument);
+                respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+            }
+            break;
+        case COMMAND_GROUP_QUIT:
+            if (memberNum == -1)
+            {
+                sprintf(serverComment, "nickname '%s' is not in group '%s'", userList[userID].nickname, groupReq.argument);
+                respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+            }
+            else
+            {
+                sprintf(serverComment, "nickname '%s' left group '%s'.", userList[userID].nickname, groupReq.argument);
+                broadCastToGroup(target, &userList[userID], serverComment, sendMsg);
+                target->members[memberNum] = NULL;
+                sprintf(serverComment, "quit group '%s' succeed.", groupReq.argument);
+                respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+
+                //# remove group when nobody left.
+                int userCount = 0;
+                for (int user = 0; user < target->maxMember; user++)
+                    if (target->members[user] != NULL)
+                        userCount++;
+
+                if (userCount == 0)
+                {
+                    target->maxMember = 0;
+                    memset(target->name, 0, SIZE_OPTION);
+                    free(target->members);
+                    target->members = NULL;
+                }
+            }
+            break;
+        }
+    }
+    else if (income->cmdCode == COMMAND_GROUP_CHAT)
+    {
+        chatObject fromMessage;
+        convertChatStringToChatObject(income->body, &fromMessage);
+        userGroupObject *target = getGroupObjectByGroupName(groupList, fromMessage.client);
+        if (target == NULL)
+        {
+            sprintf(serverComment, "group '%s' is not exist", fromMessage.client);
+            respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
+            return;
+        }
+        else
+            broadCastToGroup(target, &userList[userID], fromMessage.message, sendMsg);
     }
     else
         respondToClient(userList[userID].sock, RESPONSE_ERROR, "Unknown Command Inputed", sendMsg);
@@ -186,15 +249,20 @@ int main(int argc, char **argv)
     convertConnectObjectToDataObject(&connectInfo, &broadCast);
     convertDataObjectToDataObjectString(&broadCast, connectMessage);
 
+    //# generate user and group object for service
     userSocketObject users[MAX_CLIENT];
     for (int i = 0; i < MAX_CLIENT; i++)
         users[i].sock = -1;
+    userGroupObject groups[MAX_GROUP];
+    for (int i = 0; i < MAX_GROUP; i++)
+        groups[i].members = NULL;
+    generateGroupObject(groups, MAX_CLIENT, "global");
 
     //# run server task forever
-    time_t userTimer, multiTimer, now;
-    time(&userTimer);
+    time_t multiTimer, logTimer, now;
+    time(&logTimer);
     time(&multiTimer);
-    fprintf(stdout, "[System] start multiCasting iomux multiplexing server connect Info[%s:%d]\n", connectInfo.ip, connectInfo.port);
+    fprintf(stdout, "[System] start multiCasting iomux multiplexing server connect Info[%s:%d]\n\n", connectInfo.ip, connectInfo.port);
     while (1)
     {
         struct timeval timer = {1, 0};
@@ -207,19 +275,25 @@ int main(int argc, char **argv)
         //# MultiCast Server : Deploy tcp_Iomux_Server_ConnectInfo
         if (difftime(now, multiTimer) >= 1)
         {
+            manageGroupMemorySystem(groups);
             sendto(multi_sock, connectMessage, MAX_BUF, 0, (struct sockaddr *)&multiaddr, sizeof(multiaddr));
             time(&multiTimer);
         }
 
-        //# Show User List
-        if (difftime(now, userTimer) >= 30)
+        //# Show User,Group List
+        if (difftime(now, logTimer) >= 20)
         {
-            fprintf(stdout, "\n-------- User List --------\n");
+            fprintf(stdout, "\n-------- Group List --------\n");
+            for (int i = 0; i < MAX_GROUP; i++)
+                if (groups[i].members != NULL)
+                    fprintf(stdout, "   [Group] : %s\n", groups[i].name);
+            fprintf(stdout, "--------    END    --------\n");
+            fprintf(stdout, "-------- User List --------\n");
             for (int i = 0; i < MAX_CLIENT; i++)
                 if (users[i].sock > 0)
                     fprintf(stdout, "   [User] : %s\n", users[i].nickname);
             fprintf(stdout, "--------    END    --------\n\n");
-            time(&userTimer);
+            time(&logTimer);
         }
 
         //# Server Socket - accept from client and save to userObject
@@ -279,7 +353,7 @@ int main(int argc, char **argv)
 
                     dataObject income;
                     convertDataObjectStringToDataObject(recvMsg, &income);
-                    serverCommandCenter(&income, serverComment, sendMsg, users, i);
+                    serverCommandCenter(&income, serverComment, sendMsg, users, groups, i);
                 }
                 else
                 {
@@ -298,5 +372,5 @@ int main(int argc, char **argv)
             }
         }
     }
-    close(multi_sock);
+    close(server_sockfd);
 }

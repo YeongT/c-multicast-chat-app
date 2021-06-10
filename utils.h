@@ -132,9 +132,9 @@ void convertChatStringToChatObject(char *originChatString, chatObject *targetCha
     copyMessageFromBodyString(COMMAND_CHAT, originChatString, targetChatObject->message);
 }
 
-void convertChatObjectToDataObject(chatObject *originChatObject, dataObject *targetDataObject)
+void convertChatObjectToDataObject(chatObject *originChatObject, dataObject *targetDataObject, bool isTargetGroup)
 {
-    targetDataObject->cmdCode = COMMAND_CHAT;
+    targetDataObject->cmdCode = isTargetGroup ? COMMAND_GROUP_CHAT : COMMAND_CHAT;
     memset(targetDataObject->body, 0, MAX_BUF - SIZE_CMD_CODE);
     strcpy(targetDataObject->body, originChatObject->client);
     strcpy(&targetDataObject->body[SIZE_OPTION], originChatObject->message);

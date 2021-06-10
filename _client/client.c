@@ -6,7 +6,7 @@
 #include "../utils.h"
 #include "../multicast.h"
 
-bool chatStatus = false;
+int chatStatus = CLIENT_STATUS_WAIT;
 dataObject sendData, recvData;
 
 void startClientIomuxServer(fd_set *reads, int *fd_num, int *fd_max)
@@ -47,7 +47,8 @@ void executeHelpCenter(int helpCode)
 	/*
 		all : 0
 		chat : 1
-		show users : 2
+		users : 2
+		group : 3
 	*/
 	switch (helpCode)
 	{
@@ -55,6 +56,8 @@ void executeHelpCenter(int helpCode)
 		fprintf(stdout, "\n [HELP] 특정 명령어에 대한 자세한 내용이 필요하면 help [명령어 이름]을 입력하세요.\n");
 		fprintf(stdout, ">  명령어 종류는 아래와 같습니다.\n");
 		fprintf(stdout, ">  chat	다른 유저와 채팅을 하고 싶을 때 사용합니다.\n");
+		fprintf(stdout, ">	group	그룹 채팅을 하기 위해 사용합니다.\n");
+		fprintf(stdout, ">	users	그룹의 사용자 목록을 보여줍니다.\n");
 		fprintf(stdout, ">  logout	서버에 로그아웃 합니다.\n");
 		break;
 	case 1:
@@ -66,19 +69,34 @@ void executeHelpCenter(int helpCode)
 		fprintf(stdout, ">  유저의 상태가 오프라인이면 연결되지 않습니다.\n");
 		break;
 	case 2:
+		fprintf(stdout, "\n\n [USERS] 해당 그룹의 사용자 목록을 출력합니다.\n");
+		fprintf(stdout, ">  users [그룹이름]\n");
+		fprintf(stdout, ">  모든 사용자는 'global'이라는 그룹에 속해 있습니다.\n");
+		break;
+	case 3:
+		fprintf(stdout, "\n\n [GROUP] 그룹 채팅에 관련된 명령어 입니다.\n");
+		fprintf(stdout, ">	group make [그룹명]\n");
+		fprintf(stdout, ">	입력한 그룹명의 그룹을 만듭니다. 다른 사용자가 참가하고, 채팅할 수 있습니다.\n\n");
+		fprintf(stdout, ">	group join [그룹명]\n");
+		fprintf(stdout, ">	입력한 그룹명의 그룹에 참가합니다. 참가한 그룹의 그룹원들끼리 채팅할 수 있습니다.\n\n");
+		fprintf(stdout, ">	group quit [그룹명]\n");
+		fprintf(stdout, ">	참가한 그룹 방에서 나갑니다.\n\n");
+		fprintf(stdout, ">	group chat [그룹명]\n");
+		fprintf(stdout, ">	참가한 그룹의 그룹원들과 채팅합니다. 입력한 메시지는 그룹에 속한 모든 사용자에게 전달됩니다.\n");
 		break;
 	}
+
 	fprintf(stdout, "\n");
 }
 
 void clientCommandCenter(char *sendMsg, char *recvMsg, int tcpSock, chatObject *sendChat)
 {
-	if (chatStatus)
+	if (chatStatus != CLIENT_STATUS_WAIT)
 	{
 		if (strcmp(recvMsg, "/exit") == 0)
 		{
-			fprintf(stdout, "[System] chatRoom with '%s' closed.\n\n", sendChat->client);
-			chatStatus = false;
+			chatStatus == CLIENT_STATUS_CHAT ? fprintf(stdout, "[System] chatRoom with '%s' closed.\n\n", sendChat->client) : fprintf(stdout, "[System] chatRoom with group '%s' closed.\n\n", sendChat->client);
+			chatStatus = CLIENT_STATUS_WAIT;
 			return;
 		}
 
@@ -86,13 +104,13 @@ void clientCommandCenter(char *sendMsg, char *recvMsg, int tcpSock, chatObject *
 		memcpy(sendChat->message, recvMsg, SIZE_MESSAGE);
 
 		memset(sendMsg, 0, MAX_BUF);
-		convertChatObjectToDataObject(sendChat, &sendData);
+		convertChatObjectToDataObject(sendChat, &sendData, chatStatus == CLIENT_STATUS_GROUP ? true : false);
 		convertDataObjectToDataObjectString(&sendData, sendMsg);
 		write(tcpSock, sendMsg, MAX_BUF);
 		return;
 	}
 
-	// assign two dimension char array
+	//# assign two dimension char array
 	char **input;
 	input = (char **)malloc(sizeof(char *) * 5);
 	for (int i = 0; i < 5; i++)
@@ -101,7 +119,7 @@ void clientCommandCenter(char *sendMsg, char *recvMsg, int tcpSock, chatObject *
 		memset(input[i], 0, sizeof(char) * SIZE_OPTION);
 	}
 
-	// divide string into array
+	//# divide string into array
 	int columnCount = splitStringByCharacter(recvMsg, ' ', input);
 	if (strcmp(input[0], "chat") == 0)
 	{
@@ -141,8 +159,41 @@ void clientCommandCenter(char *sendMsg, char *recvMsg, int tcpSock, chatObject *
 		convertDataObjectToDataObjectString(&sendData, sendMsg);
 		write(tcpSock, sendMsg, MAX_BUF);
 	}
-	else if (false)
+	else if (strcmp(input[0], "group") == 0)
 	{
+		if (columnCount != 3)
+		{
+			executeHelpCenter(3);
+			return;
+		}
+
+		int cmdCode;
+		if (strcmp(input[1], "chat") == 0)
+			cmdCode = COMMAND_GROUP_CHECK_JOIN;
+		else if (strcmp(input[1], "make") == 0)
+			cmdCode = COMMAND_GROUP_MAKE;
+		else if (strcmp(input[1], "join") == 0)
+			cmdCode = COMMAND_GROUP_JOIN;
+		else if (strcmp(input[1], "quit") == 0)
+			cmdCode = COMMAND_GROUP_QUIT;
+		else
+		{
+			executeHelpCenter(3);
+			return;
+		}
+
+		optionObject groupReq;
+		memset(sendMsg, 0, MAX_BUF);
+
+		memset(groupReq.argument, 0, SIZE_OPTION);
+		strcpy(groupReq.argument, input[2]);
+
+		convertOptionObjectToDataObject(cmdCode, &groupReq, &sendData);
+		convertDataObjectToDataObjectString(&sendData, sendMsg);
+		write(tcpSock, sendMsg, MAX_BUF);
+
+		memset(sendChat->client, 0, SIZE_OPTION);
+		strcpy(sendChat->client, input[2]);
 	}
 	else if (strcmp(input[0], "logout") == 0)
 	{
@@ -238,7 +289,7 @@ int main(int argc, char *argv[])
 		convertDataObjectStringToDataObject(recvMsg, &recvData);
 		convertResultStringToResultObject(recvData.body, &result);
 
-		//print login result
+		//# print login result
 		fprintf(stdout, "==> [Server] : %s\n", result.message);
 		if (result.status == RESPONSE_LOGIN_SUCCESS)
 			break;
@@ -267,7 +318,7 @@ int main(int argc, char *argv[])
 				if (sock == STDIN)
 				{
 					memset(recvMsg, 0, MAX_BUF);
-					if ((str_len = read(sock, recvMsg, MAX_BUF)) <= 0) // close request!
+					if ((str_len = read(sock, recvMsg, MAX_BUF)) <= 0) 
 						exit(1);
 
 					removeEndKeyFromString(recvMsg);
@@ -288,20 +339,26 @@ int main(int argc, char *argv[])
 					convertDataObjectStringToDataObject(recvMsg, &recvData);
 					convertResultStringToResultObject(recvData.body, &result);
 
-					if (result.status == RESPONSE_CHECK_ONLINE || result.status == RESPONSE_CHECK_OFFLINE)
+					if (result.status == RESPONSE_CHECK_ONLINE || result.status == RESPONSE_CHECK_OFFLINE ||
+						result.status == RESPONSE_GROUP_JOINED || result.status == RESPONSE_GROUP_NOT_JOINED)
 					{
 						if (result.status == RESPONSE_CHECK_ONLINE)
 						{
 							fprintf(stdout, "[System] chatRoom with '%s' opened. If you want to quit, type '/exit'\n", sendChat.client);
-							chatStatus = true;
+							chatStatus = CLIENT_STATUS_CHAT;
+						}
+						else if (result.status == RESPONSE_GROUP_JOINED)
+						{
+							fprintf(stdout, "[System] chatRoom with group '%s' opened. If you want to quit, type '/exit'\n", sendChat.client);
+							chatStatus = CLIENT_STATUS_GROUP;
 						}
 						else
 							fprintf(stdout, "==> [CHECK] : %s\n", result.message);
 					}
 					else if (result.status == RESPONSE_INFORMATION)
-					{
 						fprintf(stdout, "==> [Server] : %s\n", result.message);
-					}
+					else if (result.status == RESPONSE_GROUP_MESSAGE)
+						fprintf(stdout, "%s\n", result.message);
 					else
 						fprintf(stdout, "\n[LINE 316 : RESULT RECV DEFAULT HANDLE] %d / %s\n\n", result.status, result.message);
 					break;

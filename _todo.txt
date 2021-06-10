@@ -35,12 +35,12 @@
 //  * [client] ./tcp_connect $iomux_server_ip $port (open socket) - temp connection
 //  * [iomux_server] accept tcp connection & connect to target client-iomux_server using tcp and save sock
 //
-//  * while loop started
-//    # login $nickname
+//  $nickname
 //      > commandObject[login, '$nickname'] 
 //      * [iomux_server] set nickname of userObject
 //      < responseObject[status, 'result']
-//  
+//
+//  * while loop started 
 //    # chat $nickname (should check if user logined - user local userName variable)
 //      > commandObject[check,'$nickname']
 //      < responseObject[status,'result']
