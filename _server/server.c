@@ -151,6 +151,8 @@ void serverCommandCenter(dataObject *income, char *serverComment, char *sendMsg,
                 sprintf(serverComment, "quit group '%s' succeed.", groupReq.argument);
                 respondToClient(userList[userID].sock, RESPONSE_INFORMATION, serverComment, sendMsg);
 
+                if (target == &groupList[0])
+                    break;
                 //# remove group when nobody left.
                 int userCount = 0;
                 for (int user = 0; user < target->maxMember; user++)

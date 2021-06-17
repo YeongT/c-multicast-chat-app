@@ -318,7 +318,7 @@ int main(int argc, char *argv[])
 				if (sock == STDIN)
 				{
 					memset(recvMsg, 0, MAX_BUF);
-					if ((str_len = read(sock, recvMsg, MAX_BUF)) <= 0) 
+					if ((str_len = read(sock, recvMsg, MAX_BUF)) <= 0)
 						exit(1);
 
 					removeEndKeyFromString(recvMsg);
@@ -359,15 +359,14 @@ int main(int argc, char *argv[])
 						fprintf(stdout, "==> [Server] : %s\n", result.message);
 					else if (result.status == RESPONSE_GROUP_MESSAGE)
 						fprintf(stdout, "%s\n", result.message);
-					else
-						fprintf(stdout, "\n[LINE 316 : RESULT RECV DEFAULT HANDLE] %d / %s\n\n", result.status, result.message);
+					//else fprintf(stdout, "\n[LINE 316 : RESULT RECV DEFAULT HANDLE] %d / %s\n\n", result.status, result.message);
 					break;
 				case COMMAND_CHAT:
 					convertChatStringToChatObject(recvData.body, &recvChat);
 					fprintf(stdout, "> [Message from '%s'] : %s\n", recvChat.client, recvChat.message);
 					break;
 				default:
-					fprintf(stdout, "\n[LINE 323 : SELECT RECV DEFAULT HANDLE] %s\n\n", recvData.body);
+					//fprintf(stdout, "\n[LINE 323 : SELECT RECV DEFAULT HANDLE] %s\n\n", recvData.body);
 					break;
 				}
 			}
